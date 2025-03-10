@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>麦克斯韦关系式拼图游戏 - 无标记干扰项版</title>
+    <script>
+        MathJax = {
+            tex: {
+                inlineMath: [['$', '$']],
+                displayMath: [['$$', '$$']],
+                tags: 'ams'
+            },
+            startup: {
+                typeset: false
+            }
+        };
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f8f9fa;
+        }
+
+        #mode-selector {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #e9ecef;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        #game-mode {
+            padding: 8px 12px;
+            font-size: 16px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+        }
+
+        #timer {
+            display: none;
+            color: #dc3545;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+
+        button {
+            background: #4dabf7;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-left: 10px;
+        }
+
+        button:hover {
+            filter: brightness(0.9);
+        }
+
+        #show-answer {
+            background: #37b24d;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 2fr 1fr;
+            gap: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+            align-items: start;
+            min-height: 100vh;
+        }
+
+        .term-block {
+            background: #fff;
+            border: 2px solid #adb5bd;
+            padding: 12px;
+            margin: 8px;
+            cursor: move;
+            border-radius: 6px;
+            transition: all 0.2s;
+            font-size: 14px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .term-block:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 3px 6px rgba(0,0,0,0.15);
+            background: #e7f5ff;
+        }
+
+        .term-block.preset {
+            background: #d0ebff !important;
+            cursor: default;
+        }
+
+        .equation-area {
+            min-height: 150px;
+            border: 3px dashed #868e96;
+            padding: 20px;
+            background: #fff;
+            margin: 15px 0;
+            border-radius: 8px;
+            transition: background 0.3s;
+        }
+
+        .equation-area.correct { background: #d3f9d8; }
+        .equation-area.wrong { 
+            background: #ffe3e3;
+            animation: shake 0.5s;
+        }
+
+        #formula-preview {
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            position: sticky;
+            top: 20px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        #term-library {
+            position: sticky;
+            top: 20px;
+            max-height: 90vh;
+            overflow-y: auto;
+            padding-right: 10px;
+        }
+
+        #game-area {
+            max-height: 90vh;
+            overflow-y: auto;
+            padding: 0 15px;
+        }
+
+        #term-library::-webkit-scrollbar,
+        #game-area::-webkit-scrollbar,
+        #formula-preview::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        #term-library::-webkit-scrollbar-track,
+        #game-area::-webkit-scrollbar-track,
+        #formula-preview::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        #term-library::-webkit-scrollbar-thumb,
+        #game-area::-webkit-scrollbar-thumb,
+        #formula-preview::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+        }
+
+        .potential {
+            color: #2b8a3e;
+            font-size: 0.95em;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        .hint {
+            color: #868e96;
+            font-size: 0.85em;
+            margin-top: 10px;
+        }
+
+        @keyframes shake {
+            0% { transform: translateX(0); }
+            25% { transform: translateX(-8px); }
+            50% { transform: translateX(8px); }
+            75% { transform: translateX(-8px); }
+            100% { transform: translateX(0); }
+        }
+    </style>
+</head>
+<body>
+    <div id="mode-selector">
+        <select id="game-mode">
+            <option value="beginner">初学者模式</option>
+            <option value="expert">专家模式</option>
+            <option value="challenge">挑战模式</option>
+            <option value="timed">限时模式</option>
+        </select>
+        <button id="reset-button">重置游戏</button>
+        <button id="show-answer">显示答案</button>
+        <div id="timer">剩余时间: <span>60</span>秒</div>
+    </div>
+
+    <div class="container">
+        <div id="term-library">
+            <h3>偏微分项库</h3>
+        </div>
+        
+        <div id="game-area">
+            <h3>方程构建区</h3>
+        </div>
+
+        <div id="formula-preview">
+            <h3>当前方程</h3>
+            <div id="current-equation"></div>
+        </div>
+    </div>
+
+<script>
+class MaxwellPuzzle {
+    constructor(mode = 'beginner') {
+        this.mode = mode;
+        this.baseEquations = [
+            {
+                id: 'U-ST',
+                left: '\\left(\\frac{\\partial T}{\\partial V}\\right)_S',
+                right: '-\\left(\\frac{\\partial p}{\\partial S}\\right)_V',
+                terms: ['∂T/∂V', 'S', '=', '-∂p/∂S', 'V'],
+                potential: '内能 $U(S,V)$',
+                hint: '微分形式：$dU = TdS - pdV$'
+            },
+            {
+                id: 'H-Sp',
+                left: '\\left(\\frac{\\partial T}{\\partial p}\\right)_S',
+                right: '\\left(\\frac{\\partial V}{\\partial S}\\right)_p',
+                terms: ['∂T/∂p', 'S', '=', '∂V/∂S', 'p'],
+                potential: '焓 $H(S,p)$',
+                hint: '微分形式：$dH = TdS + Vdp$'
+            },
+            {
+                id: 'F-TV',
+                left: '\\left(\\frac{\\partial S}{\\partial V}\\right)_T',
+                right: '\\left(\\frac{\\partial p}{\\partial T}\\right)_V',
+                terms: ['∂S/∂V', 'T', '=', '∂p/∂T', 'V'],
+                potential: '亥姆霍兹自由能 $F(T,V)$',
+                hint: '微分形式：$dF = -SdT - pdV$'
+            },
+            {
+                id: 'G-Tp',
+                left: '\\left(\\frac{\\partial S}{\\partial p}\\right)_T',
+                right: '-\\left(\\frac{\\partial V}{\\partial T}\\right)_p',
+                terms: ['∂S/∂p', 'T', '=', '-∂V/∂T', 'p'],
+                potential: '吉布斯自由能 $G(T,p)$',
+                hint: '微分形式：$dG = -SdT + Vdp$'
+            }
+        ];
+        this.interferenceTerms = ['∂μ/∂T', '∂ρ/∂p', '∂Q/∂S', '∂U/∂N', '∂F/∂x'];
+        this.equations = this.generateEquations();
+        this.timer = null;
+        
+        this.initGameArea();
+        this.initLibrary();
+        this.setupEventListeners();
+        this.setupTimer();
+    }
+
+    generateEquations() {
+        let equations = JSON.parse(JSON.stringify(this.baseEquations));
+        switch(this.mode) {
+            case 'expert':
+                return equations.map(eq => ({
+                    ...eq,
+                    terms: this.shuffleTerms(this.splitTerms(eq.terms))
+                }));
+            case 'challenge':
+                return equations.map(eq => ({
+                    ...eq,
+                    terms: [...eq.terms, ...this.getRandomInterference(2)]
+                }));
+            default:
+                return equations;
+        }
+    }
+
+    initGameArea() {
+        const gameArea = document.getElementById('game-area');
+        gameArea.innerHTML = `
+            <h3>方程构建区</h3>
+            ${this.baseEquations.map(eq => 
+                `<div class="equation-area" data-equation="${eq.id}"></div>`
+            ).join('')}
+        `;
+    }
+
+    initLibrary() {
+        const library = document.getElementById('term-library');
+        library.innerHTML = '<h3>偏微分项库</h3>';
+        
+        let terms = this.mode === 'beginner' 
+            ? this.getMissingTerms() 
+            : [...new Set(this.equations.flatMap(eq => eq.terms))];
+        
+        terms = this.shuffleTerms([...terms]);
+
+        terms.forEach(term => {
+            const div = document.createElement('div');
+            div.className = `term-block`;  // 移除了干扰项标记
+            div.draggable = !this.isPreset(term);
+            div.dataset.term = term;
+            div.textContent = term;
+            library.appendChild(div);
+        });
+
+        if(this.mode === 'beginner') this.presetTerms();
+    }
+
+    setupEventListeners() {
+        document.getElementById('term-library').addEventListener('dragstart', e => {
+            if (e.target.classList.contains('term-block')) {
+                this.handleDragStart(e);
+            }
+        });
+
+        document.getElementById('game-area').addEventListener('dragover', e => e.preventDefault());
+        
+        document.getElementById('game-area').addEventListener('drop', e => {
+            const target = e.target.closest('.equation-area');
+            if (target) this.handleDrop(e, target);
+        });
+    }
+
+    handleDragStart(e) {
+        e.dataTransfer.setData('text/plain', e.target.dataset.term);
+    }
+
+    async handleDrop(e, target) {
+        e.preventDefault();
+        const term = e.dataTransfer.getData('text/plain');
+        const equation = this.getEquation(target.dataset.equation);
+        
+        if(this.validateDrop(term, target, equation)) {
+            this.placeTerm(term, target);
+            await this.updateEquationDisplay(equation.id);
+            this.checkCompletion();
+        } else {
+            this.showErrorFeedback(target);
+        }
+    }
+
+    validateDrop(term, target, equation) {
+        const currentTerms = [...target.children].map(el => el.textContent);
+        if(currentTerms.length >= equation.terms.length) return false;
+        if(!equation.terms.includes(term)) return false;
+        if(this.mode === 'challenge' && this.isInterference(term)) return false;
+        if(this.mode === 'expert' && term !== equation.terms[currentTerms.length]) return false;
+        return true;
+    }
+
+    placeTerm(term, target) {
+        const clone = document.createElement('div');
+        clone.className = `term-block`;  // 移除了干扰项标记
+        clone.textContent = term;
+        target.appendChild(clone);
+        target.classList.add('correct');
+        setTimeout(() => target.classList.remove('correct'), 500);
+    }
+
+    showErrorFeedback(target) {
+        target.classList.add('wrong');
+        setTimeout(() => target.classList.remove('wrong'), 500);
+    }
+
+    async updateEquationDisplay(equationId) {
+        const equation = this.getEquation(equationId);
+        const preview = document.getElementById('current-equation');
+        preview.innerHTML = `
+            <div class="potential">${equation.potential}</div>
+            <div>$$${equation.left} = ${equation.right}$$</div>
+            <div class="hint">${equation.hint}</div>
+        `;
+        await MathJax.typesetPromise([preview]);
+    }
+
+    checkCompletion() {
+        const completed = this.getCompletedCount();
+        if(completed === this.equations.length) {
+            const timeUsed = this.mode === 'timed' 
+                ? 60 - document.querySelector('#timer span').textContent 
+                : '';
+            alert(`恭喜！全部方程正确完成！${timeUsed ? '用时' + timeUsed + '秒' : ''}`);
+        }
+    }
+
+    resetGame() {
+        clearInterval(this.timer);
+        this.timer = null;
+        this.initGameArea();
+        this.initLibrary();
+        this.setupTimer();
+        document.getElementById('current-equation').innerHTML = '';
+    }
+
+    showFullSolution() {
+        clearInterval(this.timer);
+        this.clearEquationAreas();
+        this.equations.forEach(eq => {
+            const area = document.querySelector(`[data-equation="${eq.id}"]`);
+            const validTerms = this.mode === 'challenge' 
+                ? eq.terms.filter(t => !this.isInterference(t))
+                : eq.terms;
+            validTerms.forEach(term => {
+                const block = document.createElement('div');
+                block.className = `term-block`;
+                block.textContent = term;
+                area.appendChild(block);
+            });
+        });
+        this.updateAllPreviews();
+    }
+
+    updateAllPreviews() {
+        const preview = document.getElementById('current-equation');
+        preview.innerHTML = this.equations.map(eq => `
+            <div class="equation-group">
+                <div class="potential">${eq.potential}</div>
+                <div>$$${eq.left} = ${equation.right}$$</div>
+                <div class="hint">${eq.hint}</div>
+            </div>
+        `).join('<hr>');
+        MathJax.typesetPromise([preview]);
+    }
+
+    clearEquationAreas() {
+        document.querySelectorAll('.equation-area').forEach(area => {
+            area.innerHTML = '';
+            area.classList.remove('correct', 'wrong');
+        });
+    }
+
+    presetTerms() {
+        this.equations.forEach(eq => {
+            const area = document.querySelector(`[data-equation="${eq.id}"]`);
+            eq.terms.slice(0, 3).forEach(term => {
+                const block = document.createElement('div');
+                block.className = 'term-block preset';
+                block.textContent = term;
+                area.appendChild(block);
+            });
+        });
+    }
+
+    setupTimer() {
+        if(this.mode === 'timed') {
+            const timerDisplay = document.querySelector('#timer span');
+            let timeLeft = 60;
+            document.getElementById('timer').style.display = 'block';
+            
+            this.timer = setInterval(() => {
+                timerDisplay.textContent = --timeLeft;
+                if(timeLeft <= 0) {
+                    clearInterval(this.timer);
+                    alert(`时间到! 正确完成方程数: ${this.getCompletedCount()}`);
+                }
+            }, 1000);
+        }
+    }
+
+    getCompletedCount() {
+        return [...document.querySelectorAll('.equation-area')]
+            .filter(area => 
+                [...area.children].map(el => el.textContent).join('') === 
+                this.getEquation(area.dataset.equation).terms.join('')
+            ).length;
+    }
+
+    splitTerms(terms) { return terms.flatMap(t => t.split(/(\/|=)/g)).filter(t => t); }
+    shuffleTerms(arr) { for(let i = arr.length-1; i>0; i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]] } return arr; }
+    getRandomInterference(count) { return Array.from({length:count}, () => this.interferenceTerms[Math.floor(Math.random()*this.interferenceTerms.length)]); }
+    getEquation(id) { return this.equations.find(eq => eq.id === id); }
+    getMissingTerms() { return this.baseEquations.flatMap(eq => eq.terms.slice(3)); }
+    isInterference(term) { return this.interferenceTerms.includes(term); }
+    isPreset(term) { return this.mode === 'beginner' && !this.getMissingTerms().includes(term); }
+}
+
+let currentGame = null;
+
+document.getElementById('game-mode').addEventListener('change', function() {
+    currentGame = new MaxwellPuzzle(this.value);
+});
+
+document.getElementById('reset-button').addEventListener('click', () => {
+    currentGame?.resetGame();
+});
+
+document.getElementById('show-answer').addEventListener('click', function() {
+    if(confirm('显示答案将重置当前进度，是否继续？')) {
+        currentGame.showFullSolution();
+        this.classList.add('disabled');
+    }
+});
+
+window.addEventListener('DOMContentLoaded', () => {
+    currentGame = new MaxwellPuzzle();
+});
+</script>
+</body>
+</html>
